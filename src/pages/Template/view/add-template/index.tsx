@@ -5,7 +5,6 @@ import {
   TextField,
   IconButton,
   Typography,
-  Button,
   Dialog,
   DialogActions,
   DialogContent,
@@ -20,94 +19,53 @@ import React, {
   useState,
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { styled } from "@mui/system";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import WebViewer, { WebViewerInstance } from "@pdftron/webviewer";
 import { ref } from "firebase/storage";
-import { LoadingButton } from "@mui/lab";
 import FileUploadIcon from "@mui/icons-material/FileUpload";
 import AlertPopup from "../../../../components/AlertPopup";
-import { TemplateArgs } from "../../../../models/template";
 import {
   getDepartmentList,
   toggleDepartmentList,
   getTemplateTypeList,
   toggleTemplateTypeList,
-  getUsers,
+  getSigner,
   clearUserList,
 } from "../../../../slices/system";
 import { addNewTemplate } from "../../../../slices/template";
-import { useDispatch, useSelector } from "../../../../hooks";
+import { useDispatch, useSelector, useSignalR } from "../../../../hooks";
 import storage from "../../../../utils/firebase";
 import { useTranslation } from "react-i18next";
+import {
+  WhiteBtn,
+  SaveLoadingBtn,
+  TextFieldStyled,
+} from "../../../../components/CustomStyled";
+import { IUser } from "../../../../models/system";
 
-const LoadingBtn = styled(
-  LoadingButton,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  padding: "5px",
-  textTransform: "unset",
-  // fontSize: '15px',
-  // width: 'fit-content',
-  ":hover": { backgroundColor: "#578aff" },
-  "&.MuiLoadingButton-loading": {
-    backgroundColor: "#fff",
-    borderColor: "#407AFF",
-  },
-});
-
-const CancelBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#fff",
-  borderRadius: "5px",
-  color: "#407AFF",
-  padding: "5px",
-  textTransform: "unset",
-  // ":hover": { backgroundColor: "#407AFF", color: "#fff", },
-});
-
-const StyledBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  ":hover": { backgroundColor: "#fff", color: "#407AFF" },
-  "&.Mui-disabled": {
-    color: "#F2F2F2",
-    backgroundColor: "#6F7276",
-  },
-});
-
-const TextFieldStyled = styled(TextField)({
-  color: "#fff",
-  input: {
-    color: "#fff",
-  },
-  "& .MuiSvgIcon-root": {
-    fill: "#fff",
-  },
-});
+interface Form {
+  templateName?: string;
+  signatoryList?: IUser[];
+  idTemplateType?: number;
+  idDepartment?: number,
+  description?: string;
+  size?: number;
+  createdBy?: number;
+}
 
 const ViewAddTemplate: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const viewer = useRef(null);
   const instance = useRef<WebViewerInstance>();
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const { userInfo } = useSelector((state) => state.auth);
+  const {sendSignalNotificationByPermission} = useSignalR()
   const {
     isGetDepartmentsLoading,
     departmentList,
     isOpenDepartmentList,
-    isGetUserListLoading,
+    isGetSignerLoading,
     userList,
     isGetTemplateTypesLoading,
     isOpenTemplateTypes,
@@ -115,7 +73,7 @@ const ViewAddTemplate: React.FC = () => {
   } = useSelector((state) => state.system);
   const { isAddNewTemplateLoading } = useSelector((state) => state.template);
 
-  const [form, setForm] = useState<TemplateArgs>({
+  const [form, setForm] = useState<Form>({
     templateName: undefined,
     description: undefined,
     idDepartment: undefined,
@@ -129,9 +87,49 @@ const ViewAddTemplate: React.FC = () => {
   const [isEnableSave, setIsEnableSave] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
 
+  const getTemplateTypesHandler = async () => {
+    if (!templateTypeList) {
+      await dispatch(getTemplateTypeList()).unwrap();
+    }
+    dispatch(toggleTemplateTypeList({ isOpen: !isOpenTemplateTypes }));
+  };
+
+  const getSignerListHandler = useCallback(() => {
+    dispatch(getSigner({ departmentId_eq: form.idDepartment })).unwrap();
+  }, [dispatch, form.idDepartment]);
+
+  const handleUpload = async () => {
+    const storageRef = ref(storage, `/file/${file!.name}`);
+    // progress can be paused and resumed. It also exposes progress updates.
+    // Receives the storage reference and the file to upload.
+    await dispatch(
+      addNewTemplate({
+        templateInfo: {...form, signatoryList: form.signatoryList!.map(signer => signer.id) },
+        storageRef,
+        file: file!,
+      })
+    ).unwrap();
+    sendSignalNotificationByPermission({
+      departmentIds: [form.idDepartment!],
+      notify: {
+        isChecked: false,
+        description: `You got a new template waiting for approval from ${userInfo?.userName}!`,
+      },
+    });
+    navigate("/user");
+  };
+
+  const onChangeSelectedDepartment = (value: number | undefined) => {
+    if (!value) {
+      setForm({ ...form, signatoryList: undefined, idDepartment: undefined });
+      return;
+    }
+    setForm({ ...form, idDepartment: value, signatoryList: undefined });
+  };
+
   useEffect(() => {
     let check = false;
-    if(!file) return 
+    if (!file) return;
     Object.values(form).forEach((value) => {
       if (!value) {
         check = true;
@@ -146,22 +144,6 @@ const ViewAddTemplate: React.FC = () => {
     setFile(newFile);
     setForm({ ...form, templateName: newFile.name, size: newFile.size });
   }
-
-  const handleUpload = async () => {
-    const storageRef = ref(storage, `/file/${file!.name}`);
-
-    // progress can be paused and resumed. It also exposes progress updates.
-    // Receives the storage reference and the file to upload.
-    await dispatch(
-      addNewTemplate({
-        templateInfo: form,
-        storageRef,
-        file: file!,
-      })
-    ).unwrap();
-    navigate("/user");
-  };
-
   // if using a class, equivalent of componentDidMount
 
   useEffect(() => {
@@ -169,25 +151,28 @@ const ViewAddTemplate: React.FC = () => {
       {
         path: "/webviewer/lib",
         initialDoc: undefined,
-        disabledElements: ["downloadButton"],
+        disabledElements: ["downloadButton", 'languageButton'],
       },
       viewer.current!
     ).then(async (inst) => {
       instance.current = inst;
       const { documentViewer } = inst.Core;
+      inst.UI.setLanguage(i18n.language === 'vn' ? 'vi' : 'en');
       const annotManager = documentViewer.getAnnotationManager();
       annotManager.enableReadOnlyMode();
       const UIEvents = inst.UI.Events;
       inst.UI.addEventListener(UIEvents.LOAD_ERROR, function (err) {
-        inst.UI.showErrorMessage('This file has been broken! Please insert another one.')
-        setFile(undefined)
+        inst.UI.showErrorMessage(
+          "This file has been broken! Please insert another one."
+        );
+        setFile(undefined);
       });
       documentViewer.addEventListener("documentLoaded", async () => {
         await documentViewer.getDocument().getDocumentCompletePromise();
         documentViewer.updateView();
       });
     });
-  }, []);
+  }, [i18n.language]);
 
   useEffect(() => {
     if (!file) {
@@ -198,40 +183,49 @@ const ViewAddTemplate: React.FC = () => {
     }
   }, [file]);
 
-  const getDepartmentListHandler = async () => {
-    if (!departmentList) {
-      await dispatch(getDepartmentList()).unwrap();
-    }
-    dispatch(toggleDepartmentList({ isOpen: !isOpenDepartmentList }));
-  };
+  useEffect(() => {
+    const getDepartment = dispatch(getDepartmentList());
+    getDepartment.unwrap();
 
-  const getTemplateTypesHandler = async () => {
-    if (!templateTypeList) {
-      await dispatch(getTemplateTypeList()).unwrap();
-    }
-    dispatch(toggleTemplateTypeList({ isOpen: !isOpenTemplateTypes }));
-  };
-
-  const getUserListHandler = useCallback(() => {
-    dispatch(getUsers({ departmentId_eq: form.idDepartment })).unwrap();
-  }, [dispatch, form.idDepartment]);
+    const getTemplateType = dispatch(getTemplateTypeList());
+    getTemplateType.unwrap()
+    return () => getDepartment.abort();
+  }, [dispatch]);
 
   useEffect(() => {
     if (form.idDepartment) {
-      getUserListHandler();
+      getSignerListHandler();
     } else {
       dispatch(clearUserList());
     }
-  }, [getUserListHandler, dispatch, form.idDepartment]);
+  }, [getSignerListHandler, dispatch, form.idDepartment]);
 
-  const onChangeSelectedDepartment = (value: number | undefined) => {
-    if (!value) {
-      setForm({ ...form, signatoryList: undefined, idDepartment: undefined });
-      return;
-    }
-    setForm({ ...form, idDepartment: value, signatoryList: undefined });
-  };
-  const { t } = useTranslation();
+  const signers = form?.signatoryList?.map((signer, index) => (
+    <div
+      className="flex flex-col space-y-3 rounded-md border border-solid border-white p-4"
+      key={index}
+    >
+      <div className="flex space-x-2 items-center ">
+        <h4>{t("Signer")}:</h4>
+        <span className="text-white text-base break-words">
+          {signer.username}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>Department:</h4>
+        <span className="text-white text-base break-words">
+          {signer.departmentName}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>{t("Role")}:</h4>
+        <span className="text-white text-base break-words">
+          {signer.roleName}
+        </span>
+      </div>
+    </div>
+  ))
+  
   return (
     <Fragment>
       <div className="bg-blue-config px-20 py-6 flex space-x-4 items-center">
@@ -304,8 +298,8 @@ const ViewAddTemplate: React.FC = () => {
                 isOptionEqualToValue={(option, value) =>
                   option.typeName === value.typeName
                 }
-                getOptionLabel={(option) => option.typeName}
-                options={templateTypeList?.items!}
+                getOptionLabel={(option) => t(option.typeName)}
+                options={templateTypeList}
                 loading={isGetTemplateTypesLoading}
                 renderInput={(params) => (
                   <TextFieldStyled
@@ -336,15 +330,12 @@ const ViewAddTemplate: React.FC = () => {
                 sx={{
                   width: 300,
                 }}
-                open={isOpenDepartmentList}
-                onOpen={getDepartmentListHandler}
-                onClose={getDepartmentListHandler}
                 onChange={(e, value) => onChangeSelectedDepartment(value?.id)}
                 isOptionEqualToValue={(option, value) =>
                   option.departmentName === value.departmentName
                 }
-                getOptionLabel={(option) => option.departmentName}
-                options={departmentList?.items!}
+                getOptionLabel={(option) => t(option.departmentName)}
+                options={departmentList}
                 loading={isGetDepartmentsLoading}
                 renderInput={(params) => (
                   <TextFieldStyled
@@ -370,12 +361,12 @@ const ViewAddTemplate: React.FC = () => {
             </div>
             <div className="flex flex-col space-y-4">
               <h4>{t("Select Signer(s)")}</h4>
-              {isGetUserListLoading && (
+              {isGetSignerLoading && (
                 <div className="flex justify-center">
                   <CircularProgress />
                 </div>
               )}
-              {userList?.items && !isGetUserListLoading && (
+              {form.idDepartment && !isGetSignerLoading && (
                 <Autocomplete
                   multiple
                   limitTags={2}
@@ -388,14 +379,14 @@ const ViewAddTemplate: React.FC = () => {
                     },
                   }}
                   id="multiple-limit-tags"
-                  options={userList?.items!}
+                  options={userList}
                   getOptionLabel={(option) => option.username}
                   onChange={(e, value) => {
                     setForm({
                       ...form,
                       signatoryList:
                         value.length > 0
-                          ? value.map((item) => item.id)
+                          ? value
                           : undefined,
                     });
                   }}
@@ -408,13 +399,14 @@ const ViewAddTemplate: React.FC = () => {
                 />
               )}
             </div>
-            <StyledBtn
+            {signers}
+            <SaveLoadingBtn
               disabled={!isEnableSave}
               onClick={() => setOpenDialog(true)}
               autoFocus
             >
               {t("Save")}
-            </StyledBtn>
+            </SaveLoadingBtn>
           </div>
         </div>
         <div className="webviewer w-full h-screen" ref={viewer}></div>
@@ -439,10 +431,10 @@ const ViewAddTemplate: React.FC = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <CancelBtn onClick={() => setOpenDialog(false)} size="small">
+          <WhiteBtn onClick={() => setOpenDialog(false)} size="small">
             {t("Cancel")}
-          </CancelBtn>
-          <LoadingBtn
+          </WhiteBtn>
+          <SaveLoadingBtn
             size="small"
             loading={isAddNewTemplateLoading}
             loadingIndicator={<CircularProgress color="inherit" size={16} />}
@@ -450,7 +442,7 @@ const ViewAddTemplate: React.FC = () => {
             onClick={handleUpload}
           >
             {t("Save")}
-          </LoadingBtn>
+          </SaveLoadingBtn>
         </DialogActions>
       </Dialog>
     </Fragment>

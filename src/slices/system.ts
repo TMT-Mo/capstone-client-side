@@ -1,5 +1,17 @@
 import { systemServices } from "./../services/system";
-import { DepartmentListResponse, GetUsersArgs, GetUsersResponse } from "./../models/system";
+import {
+  CreateAccountArgs,
+  CreateDepartmentArgs,
+  CreateRoleArgs,
+  Department,
+  EditAccountArgs,
+  EditDepartmentArgs,
+  EditRoleArgs,
+  GetUsersArgs,
+  IUser,
+  Permission,
+  Role,
+} from "./../models/system";
 import {
   CaseReducer,
   createAsyncThunk,
@@ -7,30 +19,62 @@ import {
   PayloadAction,
 } from "@reduxjs/toolkit";
 import { AxiosError } from "axios";
-import { ValidationErrors } from "../models/notification";
-import { handleError } from "./notification";
-import { GetTemplateTypeListResponse } from "../models/template";
+import { ValidationErrors } from "../models/alert";
+import { handleError, handleSuccess } from "./alert";
+import { TemplateType } from "../models/template";
 
 interface State {
+  total?: number;
+  size?: number;
+  searchItemValue?: string;
+  currentPage: number;
+  departmentList: Department[];
+  userList: IUser[];
+  permissionList: Permission[];
+  templateTypeList: TemplateType[];
+  roleList: Role[];
+  accountDetail?: IUser;
   isGetDepartmentsLoading: boolean;
   isOpenDepartmentList: boolean;
-  departmentList?: DepartmentListResponse;
   isGetUserListLoading: boolean;
-  userList?: GetUsersResponse;
   isGetTemplateTypesLoading: boolean;
-  templateTypeList?: GetTemplateTypeListResponse;
   isOpenTemplateTypes: boolean;
+  isGetSignerLoading: boolean;
+  isGetPermissionLoading: boolean;
+  isGetRoleLoading: boolean;
+  isCreateAccountLoading: boolean;
+  isEditAccountLoading: boolean;
+  isCreateRoleLoading: boolean;
+  isEditRoleLoading: boolean;
+  isCreateDepartmentLoading: boolean;
+  isEditDepartmentLoading: boolean;
 }
 
 const initialState: State = {
+  total: undefined,
+  size: 10,
+  currentPage: 0,
+  searchItemValue: undefined,
+  templateTypeList: [],
+  departmentList: [],
+  userList: [],
+  permissionList: [],
+  roleList: [],
+  accountDetail: undefined,
   isGetDepartmentsLoading: false,
-  departmentList: undefined,
   isOpenDepartmentList: false,
   isGetUserListLoading: false,
-  userList: undefined,
+  isGetPermissionLoading: false,
   isGetTemplateTypesLoading: false,
-  templateTypeList: undefined,
   isOpenTemplateTypes: false,
+  isGetSignerLoading: false,
+  isCreateAccountLoading: false,
+  isGetRoleLoading: false,
+  isEditAccountLoading: false,
+  isCreateRoleLoading: false,
+  isEditRoleLoading: false,
+  isCreateDepartmentLoading: false,
+  isEditDepartmentLoading: false,
 };
 
 type CR<T> = CaseReducer<State, PayloadAction<T>>;
@@ -52,9 +96,23 @@ const toggleTemplateTypeListCR: CR<{ isOpen: boolean }> = (
   ...state,
   isOpenTemplateTypes: payload.isOpen,
 });
-const clearUserListCR = (state:State) => ({
+
+const onChangeAccountPageCR: CR<{ selectedPage: number }> = (
+  state,
+  { payload }
+) => ({
   ...state,
-  userList: undefined,
+  currentPage: payload.selectedPage!,
+});
+
+const searchAccountCR: CR<{ value: string }> = (state, { payload }) => ({
+  ...state,
+  searchItemValue: payload.value!,
+});
+
+const getAccountDetailCR: CR<{ account: IUser }> = (state, { payload }) => ({
+  ...state,
+  accountDetail: payload.account,
 });
 
 const getDepartmentList = createAsyncThunk(
@@ -65,13 +123,16 @@ const getDepartmentList = createAsyncThunk(
       return result;
     } catch (error) {
       const err = error as AxiosError;
-      if(err.response?.data){
-        dispatch(handleError({ errorMessage: (err.response?.data as ValidationErrors).errorMessage }));
-      }
-      else{
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
         dispatch(handleError({ errorMessage: err.message }));
       }
-      throw err
+      throw err;
     }
   }
 );
@@ -84,32 +145,239 @@ const getTemplateTypeList = createAsyncThunk(
       return result;
     } catch (error) {
       const err = error as AxiosError;
-      if(err.response?.data){
-        dispatch(handleError({ errorMessage: (err.response?.data as ValidationErrors).errorMessage }));
-      }
-      else{
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
         dispatch(handleError({ errorMessage: err.message }));
       }
-      throw err
+      throw err;
     }
   }
 );
 
-const getUsers = createAsyncThunk(
-  `${ACTION_TYPE}getUsers`,
+const getSigner = createAsyncThunk(
+  `${ACTION_TYPE}getSigner`,
   async (args: GetUsersArgs | undefined, { dispatch }) => {
     try {
-      const result = await systemServices.getUsers(args)
+      const result = await systemServices.getSigner(args);
       return result;
     } catch (error) {
       const err = error as AxiosError;
-      if(err.response?.data){
-        dispatch(handleError({ errorMessage: (err.response?.data as ValidationErrors).errorMessage }));
-      }
-      else{
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
         dispatch(handleError({ errorMessage: err.message }));
       }
-      throw err
+      throw err;
+    }
+  }
+);
+
+const getUserList = createAsyncThunk(
+  `${ACTION_TYPE}getUserList`,
+  async (args: GetUsersArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.getUserList(args);
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+const getPermissionList = createAsyncThunk(
+  `${ACTION_TYPE}getPermissionList`,
+  async (_, { dispatch }) => {
+    try {
+      const result = await systemServices.getPermissionList();
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+
+const getRoleList = createAsyncThunk(
+  `${ACTION_TYPE}getRoleList`,
+  async (_, { dispatch }) => {
+    try {
+      const result = await systemServices.getRoleList();
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+
+const createAccount = createAsyncThunk(
+  `${ACTION_TYPE}createAccount`,
+  async (args: CreateAccountArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.createAccount(args);
+      dispatch(handleSuccess({ message: result.message }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+
+const editAccount = createAsyncThunk(
+  `${ACTION_TYPE}editAccount`,
+  async (args: EditAccountArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.editAccount(args);
+      dispatch(handleSuccess({ message: result.message }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+const createDepartment = createAsyncThunk(
+  `${ACTION_TYPE}createDepartment`,
+  async (args: CreateDepartmentArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.createDepartment(args);
+      dispatch(handleSuccess({ message: result.message }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+
+const editDepartment = createAsyncThunk(
+  `${ACTION_TYPE}editDepartment`,
+  async (args: EditDepartmentArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.editDepartment(args);
+      dispatch(handleSuccess({ message: result.message }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+const createRole = createAsyncThunk(
+  `${ACTION_TYPE}createRole`,
+  async (args: CreateRoleArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.createRole(args);
+      dispatch(handleSuccess({ message: result.message }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
+
+const editRole = createAsyncThunk(
+  `${ACTION_TYPE}editRole`,
+  async (args: EditRoleArgs, { dispatch }) => {
+    try {
+      const result = await systemServices.editRole(args);
+      dispatch(handleSuccess({ message: result.message }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
     }
   }
 );
@@ -120,7 +388,25 @@ const system = createSlice({
   reducers: {
     toggleDepartmentList: toggleDepartmentListCR,
     toggleTemplateTypeList: toggleTemplateTypeListCR,
-    clearUserList: clearUserListCR
+    clearUserList: (state: State) => ({
+      ...state,
+      userList: [],
+      searchItemValue: undefined,
+      total: undefined,
+      size: 10,
+      currentPage: 0,
+    }),
+    clearAccountDetail: (state: State) => ({
+      ...state,
+      accountDetail: undefined,
+    }),
+    clearAccountPagination: (state: State) => ({
+      ...state,
+      currentPage: 0,
+    }),
+    onChangeAccountPage: onChangeAccountPageCR,
+    searchAccount: searchAccountCR,
+    getAccountDetail: getAccountDetailCR,
   },
   extraReducers: (builder) => {
     builder.addCase(getDepartmentList.pending, (state) => ({
@@ -130,25 +416,36 @@ const system = createSlice({
     builder.addCase(getDepartmentList.fulfilled, (state, { payload }) => ({
       ...state,
       isGetDepartmentsLoading: false,
-      departmentList: payload!,
+      departmentList: payload.items!,
     }));
     builder.addCase(getDepartmentList.rejected, (state) => ({
       ...state,
       isGetDepartmentsLoading: false,
     }));
-    builder.addCase(getUsers.pending, (state) => ({
+    builder.addCase(getSigner.pending, (state) => ({
+      ...state,
+      isGetSignerLoading: true,
+    }));
+    builder.addCase(getSigner.fulfilled, (state, { payload }) => ({
+      ...state,
+      isGetSignerLoading: false,
+      userList: payload.items,
+    }));
+    builder.addCase(getSigner.rejected, (state) => ({
+      ...state,
+      isGetSignerLoading: false,
+    }));
+    builder.addCase(getUserList.pending, (state) => ({
       ...state,
       isGetUserListLoading: true,
     }));
-    builder.addCase(
-      getUsers.fulfilled,
-      (state, { payload }) => ({
-        ...state,
-        isGetUserListLoading: false,
-        userList: payload!,
-      })
-    );
-    builder.addCase(getUsers.rejected, (state) => ({
+    builder.addCase(getUserList.fulfilled, (state, { payload }) => ({
+      ...state,
+      isGetUserListLoading: false,
+      userList: payload.items,
+      total: payload?.total!,
+    }));
+    builder.addCase(getUserList.rejected, (state) => ({
       ...state,
       isGetUserListLoading: false,
     }));
@@ -159,20 +456,136 @@ const system = createSlice({
     builder.addCase(getTemplateTypeList.fulfilled, (state, { payload }) => ({
       ...state,
       isGetTemplateTypesLoading: false,
-      templateTypeList: payload!,
+      templateTypeList: payload.items,
     }));
     builder.addCase(getTemplateTypeList.rejected, (state) => ({
       ...state,
       isGetTemplateTypesLoading: false,
+    }));
+    builder.addCase(getPermissionList.pending, (state) => ({
+      ...state,
+      isGetPermissionLoading: true,
+    }));
+    builder.addCase(getPermissionList.fulfilled, (state, { payload }) => ({
+      ...state,
+      isGetPermissionLoading: false,
+      permissionList: payload.permissionList,
+    }));
+    builder.addCase(getPermissionList.rejected, (state) => ({
+      ...state,
+      isGetPermissionLoading: false,
+    }));
+    builder.addCase(getRoleList.pending, (state) => ({
+      ...state,
+      isGetRoleLoading: true,
+    }));
+    builder.addCase(getRoleList.fulfilled, (state, { payload }) => ({
+      ...state,
+      isGetRoleLoading: false,
+      roleList: payload.roleList,
+    }));
+    builder.addCase(getRoleList.rejected, (state) => ({
+      ...state,
+      isGetRoleLoading: false,
+    }));
+    builder.addCase(createAccount.pending, (state) => ({
+      ...state,
+      isCreateAccountLoading: true,
+    }));
+    builder.addCase(createAccount.fulfilled, (state, { payload }) => ({
+      ...state,
+      isCreateAccountLoading: false,
+    }));
+    builder.addCase(createAccount.rejected, (state) => ({
+      ...state,
+      isCreateAccountLoading: false,
+    }));
+    builder.addCase(editAccount.pending, (state) => ({
+      ...state,
+      isEditAccountLoading: true,
+    }));
+    builder.addCase(editAccount.fulfilled, (state, { payload }) => ({
+      ...state,
+      isEditAccountLoading: false,
+    }));
+    builder.addCase(editAccount.rejected, (state) => ({
+      ...state,
+      isEditAccountLoading: false,
+    }));
+    builder.addCase(createDepartment.pending, (state) => ({
+      ...state,
+      isCreateDepartmentLoading: true,
+    }));
+    builder.addCase(createDepartment.fulfilled, (state, { payload }) => ({
+      ...state,
+      isCreateDepartmentLoading: false,
+    }));
+    builder.addCase(createDepartment.rejected, (state) => ({
+      ...state,
+      isCreateDepartmentLoading: false,
+    }));
+    builder.addCase(editDepartment.pending, (state) => ({
+      ...state,
+      isEditDepartmentLoading: true,
+    }));
+    builder.addCase(editDepartment.fulfilled, (state, { payload }) => ({
+      ...state,
+      isEditDepartmentLoading: false,
+    }));
+    builder.addCase(editDepartment.rejected, (state) => ({
+      ...state,
+      isEditDepartmentLoading: false,
+    }));
+    builder.addCase(createRole.pending, (state) => ({
+      ...state,
+      isCreateRoleLoading: true,
+    }));
+    builder.addCase(createRole.fulfilled, (state, { payload }) => ({
+      ...state,
+      isCreateRoleLoading: false,
+    }));
+    builder.addCase(createRole.rejected, (state) => ({
+      ...state,
+      isCreateRoleLoading: false,
+    }));
+    builder.addCase(editRole.pending, (state) => ({
+      ...state,
+      isEditRoleLoading: true,
+    }));
+    builder.addCase(editRole.fulfilled, (state, { payload }) => ({
+      ...state,
+      isEditRoleLoading: false,
+    }));
+    builder.addCase(editRole.rejected, (state) => ({
+      ...state,
+      isEditRoleLoading: false,
     }));
   },
 });
 
 export {
   getDepartmentList,
-  getUsers,
+  getUserList,
+  getSigner,
   getTemplateTypeList,
+  createAccount,
+  getPermissionList,
+  editAccount,
+  editDepartment,
+  editRole,
+  createRole,
+  createDepartment,
+  getRoleList
 };
 
-export const { toggleDepartmentList, toggleTemplateTypeList, clearUserList } = system.actions;
+export const {
+  toggleDepartmentList,
+  toggleTemplateTypeList,
+  clearUserList,
+  onChangeAccountPage,
+  searchAccount,
+  clearAccountPagination,
+  getAccountDetail,
+  clearAccountDetail,
+} = system.actions;
 export default system.reducer;

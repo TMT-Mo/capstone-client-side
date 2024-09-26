@@ -3,7 +3,6 @@ import {
   CircularProgress,
   TextField,
   Switch,
-  Button,
   Dialog,
   DialogActions,
   DialogContent,
@@ -11,91 +10,29 @@ import {
   DialogTitle,
   Box,
   LinearProgress,
+  Typography,
 } from "@mui/material";
-import React, {
-  Fragment,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { styled } from "@mui/system";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
-import WebViewer, { Core, WebViewerInstance } from "@pdftron/webviewer";
-import { LoadingButton } from "@mui/lab";
+import WebViewer, { Core } from "@pdftron/webviewer";
 import AlertPopup from "../../../../components/AlertPopup";
-import { useDispatch, useSelector } from "../../../../hooks";
+import { useDispatch, useSelector, useSignalR } from "../../../../hooks";
 import { useTranslation } from "react-i18next";
 import { helpers } from "../../../../utils";
 import { approveDocument } from "../../../../slices/document";
 import { StatusDocument } from "../../../../utils/constants";
 import { getSignature } from "../../../../slices/auth";
-
-const LoadingBtn = styled(
-  LoadingButton,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  padding: "5px",
-  textTransform: "unset",
-  // fontSize: '15px',
-  // width: 'fit-content',
-  ":hover": { backgroundColor: "#578aff" },
-  "&.MuiLoadingButton-loading": {
-    backgroundColor: "#fff",
-    borderColor: "#407AFF",
-  },
-});
-
-const CancelBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#fff",
-  borderRadius: "5px",
-  color: "#407AFF",
-  padding: "5px",
-  textTransform: "unset",
-  // ":hover": { backgroundColor: "#407AFF", color: "#fff", },
-});
-
-const ApproveBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  ":hover": { backgroundColor: "#fff", color: "#407AFF" },
-  "&.Mui-disabled": {
-    color: "#F2F2F2",
-    backgroundColor: "#6F7276",
-  },
-});
-const RejectBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#ff5252",
-  borderRadius: "5px",
-  color: "#fff",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  ":hover": { backgroundColor: "#fff", color: "#407AFF" },
-  "&.Mui-disabled": {
-    color: "#F2F2F2",
-    backgroundColor: "#6F7276",
-  },
-});
+import {
+  WhiteBtn,
+  SaveLoadingBtn,
+  RejectBtn,
+} from "../../../../components/CustomStyled";
+import StatusTag from "../../../../components/StatusTag";
 
 const { APPROVED_DOCUMENT, REJECTED_DOCUMENT } = StatusDocument;
 const ViewApproveDocument: React.FC = () => {
-  const [t] = useTranslation();
+  const { t, i18n } = useTranslation();
   const viewer = useRef(null);
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -105,6 +42,7 @@ const ViewApproveDocument: React.FC = () => {
   const { userInfo, signature, isGetSignatureLoading } = useSelector(
     (state) => state.auth
   );
+  const { sendSignalNotification } = useSignalR();
   const {
     createdAt,
     createdBy,
@@ -115,6 +53,7 @@ const ViewApproveDocument: React.FC = () => {
     departmentName,
     typeName,
     id,
+    signatoryList,
   } = documentDetail!;
   const [isAccepting, setIsAccepting] = useState<boolean>(true);
   const [reason, setReason] = useState<string | undefined>();
@@ -124,6 +63,37 @@ const ViewApproveDocument: React.FC = () => {
   const [newXfdfString, setNewXfdfString] = useState<string | undefined>();
   // if using a class, equivalent of componentDidMount
 
+  const signers = signatoryList!.map((signer, index) => (
+    <div
+      className="flex flex-col space-y-3 rounded-md border border-solid border-white p-4"
+      key={index}
+    >
+      <div className="flex space-x-2 items-center ">
+        <h4>{t("Signer")}:</h4>
+        <span className="text-white text-base break-words">
+          {signer.username}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>{t("Department")}:</h4>
+        <span className="text-white text-base break-words">
+          {t(signer.departmentName)}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>{t("Role")}:</h4>
+        <span className="text-white text-base break-words">
+          {t(signer.roleName)}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>{t("Status")}:</h4>
+        <Typography className="text-white">
+          <StatusTag status={signer.status} type="document" />
+        </Typography>
+      </div>
+    </div>
+  ));
   const onApproveDocument = async () => {
     await dispatch(
       approveDocument({
@@ -134,6 +104,31 @@ const ViewApproveDocument: React.FC = () => {
         comment: reason,
       })
     ).unwrap();
+    if (isAccepting) {
+      const newSignerList = signatoryList?.filter(
+        (signer) => signer.id !== +userInfo?.userId!
+      )!;
+      const nextSigner = newSignerList.find(
+        (signer) => signer.status === StatusDocument.PROCESSING_DOCUMENT
+      );
+      nextSigner &&
+        sendSignalNotification({
+          userIds: [nextSigner?.id],
+          notify: {
+            isChecked: false,
+            description: `You have a new document waiting for an approval!`,
+          },
+        });
+    }
+    if(+userInfo?.userId! === signatoryList?.[signatoryList.length-1].id){
+      sendSignalNotification({
+        userIds: [createdBy.id],
+        notify: {
+          isChecked: false,
+          description: `${documentName} has been ${isAccepting ? 'approved' : 'rejected'}!`,
+        },
+      });
+    }
     navigate("/user");
   };
 
@@ -155,16 +150,27 @@ const ViewApproveDocument: React.FC = () => {
             "toolbarGroup-Insert",
             "toolbarGroup-Forms",
             "downloadButton",
+            "styling-button",
+            "toolStylePopup",
+            "languageButton",
           ],
           annotationUser: userInfo?.userId!.toString(),
+          css: "../../../../index.css",
         },
         viewer.current!
       ).then(async (inst) => {
         const { documentViewer, annotationManager } = inst.Core;
+        inst.UI.setLanguage(i18n.language === "vn" ? "vi" : "en");
         const signatureTool = documentViewer.getTool(
           "AnnotationCreateSignature"
         ) as Core.Tools.SignatureCreateTool;
+
         inst.UI.enableFeatures([inst.UI.Feature.Initials]);
+        const iframeDoc = inst.UI.iframeWindow.document;
+        // const zoomOverlay = iframeDoc.querySelector(
+        //   '[data-element="styling-button"]'
+        // );
+
         inst.UI.setHeaderItems(function (header) {
           header.push({
             type: "actionButton",
@@ -179,9 +185,11 @@ const ViewApproveDocument: React.FC = () => {
 
         documentViewer.addEventListener("documentLoaded", async () => {
           signatureTool.importSignatures([signature!]);
+          const sig = signatureTool.getFullSignatureAnnotation();
+          // sig[0].Width = 50
+          // inst.UI.disableElements(["styling-button"]);
           await annotationManager.importAnnotations(xfdfString);
           setInitialXfdfString(annotationManager.getAnnotationsList());
-          console.log('first')
           await documentViewer.getDocument().getDocumentCompletePromise();
           documentViewer.updateView();
           annotationManager.setAnnotationDisplayAuthorMap((userId) => {
@@ -217,15 +225,8 @@ const ViewApproveDocument: React.FC = () => {
     userInfo?.userId,
     userInfo?.userName,
     xfdfString,
+    i18n.language,
   ]);
-
-  console.log(
-    annotationList
-      ? annotationList.every((annot) => initialXfdfString?.includes(annot))
-      : true
-  );
-  console.log(annotationList)
-  console.log(initialXfdfString)
   return (
     <Fragment>
       <div className="bg-blue-config px-20 py-6 flex space-x-4 items-center">
@@ -240,17 +241,17 @@ const ViewApproveDocument: React.FC = () => {
         </Box>
       )}
       <div className="flex flex-col-reverse md:flex-row">
-        <div className="flex flex-col bg-dark-config min-h-screen px-10 pt-12 space-y-8 pb-8 md:w-80 md:pb-0">
+        <div className="flex flex-col bg-dark-config min-h-screen px-10 pt-12 space-y-8 pb-8 md:w-80">
           <div className="flex flex-col space-y-8 text-white">
             <div className="flex flex-col space-y-2">
-              <h4>{t("File name")}:</h4>
+              <h4 className="whitespace-nowrap">{t("File name")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {documentName}
               </span>
             </div>
 
             <div className="flex flex-col space-y-2">
-              <h4>{t("Description")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Description")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {description}
               </span>
@@ -258,31 +259,35 @@ const ViewApproveDocument: React.FC = () => {
             <div className="flex items-center space-x-1">
               <h4 className="whitespace-nowrap">{t("Type")}:</h4>
               <span className="text-white text-base break-words w-60">
-                {typeName}
+                {t(typeName)}
               </span>
             </div>
             <div className="flex items-center space-x-1">
-              <h4>{t("Department")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Department")}:</h4>
               <span className="text-white text-base break-words w-60">
-                {departmentName}
+                {t(departmentName)}
               </span>
             </div>
             <div className="flex flex-col space-y-2">
-              <h4>{t("Created By")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Created By")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {createdBy.username}
               </span>
             </div>
             <div className="flex flex-col space-y-2">
-              <h4>{t("Created At")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Created At")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {helpers.addHours(createdAt, 7)}
               </span>
             </div>
             <Divider className="bg-white" />
+            <div className="flex justify-center">
+              <h4 className="whitespace-nowrap">{t("Signer List")}:</h4>
+            </div>
+            {signers}
             <div className="flex items-center">
               <Switch
-                defaultChecked={isAccepting}
+                checked={isAccepting}
                 onClick={() => setIsAccepting((prevState) => !prevState)}
                 sx={{
                   "& .MuiSwitch-track": {
@@ -297,7 +302,7 @@ const ViewApproveDocument: React.FC = () => {
             </div>
             {!isAccepting ? (
               <div className="flex flex-col space-y-4">
-                <h4>{t("Reason")}:</h4>
+                <h4 className="whitespace-nowrap">{t("Reason")}:</h4>
                 <TextField
                   id="outlined-multiline-flexible"
                   sx={{
@@ -324,7 +329,7 @@ const ViewApproveDocument: React.FC = () => {
                 </RejectBtn>
               </div>
             ) : (
-              <ApproveBtn
+              <SaveLoadingBtn
                 size="small"
                 variant="outlined"
                 onClick={() => setOpenDialog(true)}
@@ -337,7 +342,7 @@ const ViewApproveDocument: React.FC = () => {
                 }
               >
                 {t("Approve")}
-              </ApproveBtn>
+              </SaveLoadingBtn>
             )}
           </div>
         </div>
@@ -358,10 +363,10 @@ const ViewApproveDocument: React.FC = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <CancelBtn onClick={() => setOpenDialog(false)} size="small">
+          <WhiteBtn onClick={() => setOpenDialog(false)} size="small">
             {t("Cancel")}
-          </CancelBtn>
-          <LoadingBtn
+          </WhiteBtn>
+          <SaveLoadingBtn
             size="small"
             loading={isApproveDocumentLoading}
             loadingIndicator={<CircularProgress color="inherit" size={16} />}
@@ -369,7 +374,7 @@ const ViewApproveDocument: React.FC = () => {
             onClick={onApproveDocument}
           >
             Save
-          </LoadingBtn>
+          </SaveLoadingBtn>
         </DialogActions>
       </Dialog>
       <AlertPopup

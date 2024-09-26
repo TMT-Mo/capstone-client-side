@@ -1,57 +1,132 @@
-import { NotificationStatus } from "./../utils/constants";
-import { CaseReducer, createSlice, PayloadAction } from "@reduxjs/toolkit";
+import {
+  CheckNotificationArgs,
+  GetNotificationArgs,
+} from "./../models/notification";
+import {
+  CaseReducer,
+  createAsyncThunk,
+  createSlice,
+  PayloadAction,
+} from "@reduxjs/toolkit";
 import { Notification } from "../models/notification";
+import { notificationServices } from "../services/notification";
+import { AxiosError } from "axios";
+import { ValidationErrors } from "../models/alert";
+import { handleError } from "./alert";
 
-// interface State {
-//   status?: NotificationStatus.SUCCESS | NotificationStatus.ERROR;
-//   message?: string;
-//   error?: string;
-//   duration?: number;
-//   isOpen: boolean;
-// }
+interface State {
+  isGetNotification: boolean;
+  isCheckNotificationLoading: boolean;
+  notificationList: Notification[];
+  hasNewNotification: boolean;
+}
 
-const initialState: Notification = {
-  status: undefined,
-  message: undefined,
-  errorMessage: undefined,
-  duration: undefined,
-  isOpen: false,
+type CR<T> = CaseReducer<State, PayloadAction<T>>;
+
+const ACTION_TYPE = "notification/";
+
+const initialState: State = {
+  isGetNotification: false,
+  isCheckNotificationLoading: false,
+  notificationList: [],
+  hasNewNotification: false,
 };
 
-type CR<T> = CaseReducer<Notification, PayloadAction<T>>;
-
-const handleSuccessCR: CR<{ message: string | undefined }> = (state, { payload }) => ({
+const getNewNotificationCR: CR<{ hasNewNotification: boolean }> = (
+  state,
+  { payload }
+) => ({
   ...state,
-  status: NotificationStatus.SUCCESS,
-  message: payload.message,
-  isOpen: true,
+  hasNewNotification: payload.hasNewNotification,
 });
 
-const handleErrorCR: CR<{ errorMessage: string | undefined }> = (state, { payload }) => ({
-  ...state,
-  status: NotificationStatus.ERROR,
-  errorMessage: payload.errorMessage,
-  isOpen: true,
-});
+const getNotification = createAsyncThunk(
+  `${ACTION_TYPE}getNotification`,
+  async (args: GetNotificationArgs, { dispatch }) => {
+    try {
+      const result = (await notificationServices.getNotificationList(
+        args
+      )) as Notification[];
+      if (result.find((value) => value.isChecked === false)) {
+        dispatch(getNewNotification({ hasNewNotification: true }));
+      }
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
 
-
+const checkNotification = createAsyncThunk(
+  `${ACTION_TYPE}checkNotification`,
+  async (args: CheckNotificationArgs, { dispatch }) => {
+    try {
+      const result = await notificationServices.checkNotification(args);
+      dispatch(getNewNotification({ hasNewNotification: false }));
+      return result;
+    } catch (error) {
+      const err = error as AxiosError;
+      if (err.response?.data) {
+        dispatch(
+          handleError({
+            errorMessage: (err.response?.data as ValidationErrors).errorMessage,
+          })
+        );
+      } else {
+        dispatch(handleError({ errorMessage: err.message }));
+      }
+      throw err;
+    }
+  }
+);
 
 const notification = createSlice({
   name: "notification",
   initialState,
   reducers: {
-    handleSuccess: handleSuccessCR,
-    handleClose: (state: Notification) => ({
+    getNewNotification: getNewNotificationCR,
+  },
+  extraReducers: (builder) => {
+    builder.addCase(getNotification.pending, (state) => ({
       ...state,
-      status: undefined,
-      isOpen: false,
-      message: undefined,
-      errorMessage: undefined,
-    }),
-    handleError: handleErrorCR,
+      isGetNotification: true,
+    }));
+    builder.addCase(getNotification.fulfilled, (state, { payload }) => ({
+      ...state,
+      isGetNotification: false,
+      notificationList: payload,
+    }));
+    builder.addCase(getNotification.rejected, (state) => ({
+      ...state,
+      isGetNotification: false,
+    }));
+    builder.addCase(checkNotification.pending, (state) => ({
+      ...state,
+      isCheckNotificationLoading: true,
+    }));
+    builder.addCase(checkNotification.fulfilled, (state, { payload }) => ({
+      ...state,
+      isCheckNotificationLoading: false,
+    }));
+    builder.addCase(checkNotification.rejected, (state) => ({
+      ...state,
+      isCheckNotificationLoading: false,
+    }));
   },
 });
 
-export const { handleSuccess, handleError, handleClose } = notification.actions;
+export { getNotification, checkNotification };
+
+export const { getNewNotification } = notification.actions;
 
 export default notification.reducer;

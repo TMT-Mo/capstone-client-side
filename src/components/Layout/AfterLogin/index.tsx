@@ -18,6 +18,12 @@ import History from "../../../pages/Document/history";
 import { clearDocuments } from "../../../slices/document";
 import { clearFilter } from "../../../slices/filter";
 import { Container } from "@mui/material";
+import { helpers } from "../../../utils";
+import { System } from "../../../pages/System";
+import { Account } from "../../../pages/Account";
+import { SignalR } from "../../../signalR/signalR";
+import { clearUserList } from "../../../slices/system";
+import { CreateAccount } from "../../../pages/Account/create-account";
 
 const {
   TEMPLATE,
@@ -30,26 +36,28 @@ const {
   CHANGE_PASSWORD,
   DOCUMENT_HISTORY,
   TEMPLATE_HISTORY,
+  ADD_ACCOUNT
 } = LocationIndex;
 
 const Layout: React.FC = () => {
   const dispatch = useDispatch();
   const { locationIndex } = useSelector((state) => state.location);
-
+  const location = helpers.getLocation();
 
   useEffect(() => {
-    !locationIndex &&
-      dispatch(
-        setLocation({
-          locationIndex: LocationIndex.TEMPLATE,
-        })
-      );
-  }, [dispatch, locationIndex]);
+    dispatch(
+      setLocation({
+        locationIndex:
+          location !== undefined ? location : LocationIndex.TEMPLATE,
+      })
+    );
+  }, [dispatch, location]);
 
   useEffect(() => {
     return () => {
       dispatch(clearDocuments());
       dispatch(clearTemplates());
+      dispatch(clearUserList())
       dispatch(clearFilter());
     };
   }, [dispatch]);
@@ -57,11 +65,13 @@ const Layout: React.FC = () => {
   const switchTab = () => {
     switch (locationIndex) {
       case SYSTEM:
-        return <></>;
+        return <System />;
       case NEW_TEMPLATE:
         return <NewTemplates />;
       case ACCOUNT:
-        return <></>;
+        return <Account />;
+      case ADD_ACCOUNT:
+        return <CreateAccount />;
       case TEMPLATE:
         return <Template />;
       case TEMPLATE_HISTORY:
@@ -80,14 +90,14 @@ const Layout: React.FC = () => {
         return <></>;
     }
   };
-
+//
   return (
-    <div className="flex bg-blue-light-config">
+    <div className="flex bg-blue-light-config ">
       <SideBar />
-      <div className="w-full">
+      <div className="w-full ">
         <TopBar />
         {/* <Outlet /> */}
-        <Container maxWidth='xl'>{switchTab()}</Container>
+        <Container maxWidth="xl">{switchTab()}</Container>
         {/* {switchTab()} */}
         {/* <TemplateManagement/> */}
       </div>
@@ -95,8 +105,10 @@ const Layout: React.FC = () => {
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
         autoHideDuration={3000}
       />
+      <SignalR/>
     </div>
   );
 };
+
 
 export default Layout;

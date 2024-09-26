@@ -1,8 +1,11 @@
-export const TOKEN_NAME = "token";
-
-export enum NotificationStatus {
+export enum SessionStorage {
+  LOCATION = "location",
+  TOKEN_NAME = "token"
+}
+export enum AlertStatus {
   SUCCESS = "success",
   ERROR = "error",
+  INFO = "info"
 }
 
 export enum ResponseStatus {
@@ -24,6 +27,7 @@ export enum LocationIndex {
   SHARED = 7,
   DOCUMENT_HISTORY = 8,
   CHANGE_PASSWORD = 9,
+  ADD_ACCOUNT = 10,
 }
 
 export enum ViewerLocationIndex {
@@ -84,6 +88,10 @@ export enum DataTableHeader {
   CREATED_BY = "createdBy",
   DOCUMENT_NAME = "documentName",
   IS_LOCKED = "isLocked",
+  TYPE_DOCUMENT = "typeName",
+  ID_USER = 'id',
+  USERNAME = 'username',
+  ROLE_NAME = 'roleName'
 }
 
 export enum Permissions {
@@ -132,4 +140,18 @@ export enum DeviceWidth {
   MOBILE_WIDTH = 380,
   IPAD_WIDTH = 768,
   LAPTOP_WIDTH = 1440,
+}
+
+export enum ShareTabIndex{
+  DEPARTMENT = 0,
+  USER = 1
+}
+
+export enum AccountStatus{
+  ENABLE = 1,
+  DISABLE = 2
+}
+export enum AccountStatusTag{
+  ENABLE = 'Enable',
+  DISABLE = 'Disable'
 }

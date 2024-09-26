@@ -12,18 +12,17 @@ import {
   GridFilterItem,
   GridFilterInputValueProps,
 } from "@mui/x-data-grid";
-import { useCallback, useEffect, useState } from "react";
-import { useDispatch, useSelector } from "../../../../hooks";
-import { getUsers } from "../../../../slices/system";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useSelector } from "../../../../hooks";
 import { DataTableHeader } from "../../../../utils/constants";
 
 const { CREATED_BY } = DataTableHeader;
 const SelectType = (props: GridFilterInputValueProps) => {
   const { applyValue, item } = props;
+  const {t} = useTranslation()
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const [value, setValue] = useState<any>("");
-  const dispatch = useDispatch();
-  const { userInfo } = useSelector((state) => state.auth);
   const { isGetUserListLoading, userList } = useSelector(
     (state) => state.system
   );
@@ -32,25 +31,17 @@ const SelectType = (props: GridFilterInputValueProps) => {
     applyValue({
       ...item,
       value: e.target.value,
-      columnField: CREATED_BY,
+      columnField: t(CREATED_BY),
     });
     setValue(e.target.value);
   };
-
-  // const getUserListHandler = useCallback(() => {
-  //   dispatch(getUsers({ departmentId_eq: +userInfo?.idDepartment! })).unwrap();
-  // }, [dispatch, userInfo?.idDepartment]);
-
-  // useEffect(() => {
-  //   !userList && getUserListHandler();
-  // }, [getUserListHandler, userList]);
 
   return (
     <>
       {userList && (
         <FormControl variant="standard" sx={{ minWidth: 120 }}>
           <InputLabel id="demo-simple-select-standard-label">
-            Filter value
+            {t('Filter value')}
           </InputLabel>
           <Select
             labelId="demo-simple-select-standard-label"
@@ -59,7 +50,7 @@ const SelectType = (props: GridFilterInputValueProps) => {
             value={value}
             onChange={handleChange}
           >
-            {userList.items.map((item) => (
+            {userList.map((item) => (
               <MenuItem value={item.id} key={item.id}>
                 {item.username}
               </MenuItem>
@@ -87,11 +78,12 @@ const SelectType = (props: GridFilterInputValueProps) => {
 
 export const createdByOnlyOperators: GridFilterOperator[] = [
   {
-    label: "equal",
+    label: "Equal",
     value: "equal",
     getApplyFilterFn: (filterItem: GridFilterItem) => {
       return filterItem.value;
     },
     InputComponent: SelectType,
+
   },
 ];

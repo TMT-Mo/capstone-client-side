@@ -4,7 +4,6 @@ import {
   TextField,
   Switch,
   Typography,
-  Button,
   Dialog,
   DialogActions,
   DialogContent,
@@ -13,77 +12,15 @@ import {
 } from "@mui/material";
 import React, { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { styled } from "@mui/system";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import WebViewer from "@pdftron/webviewer";
-import { LoadingButton } from "@mui/lab";
 import AlertPopup from "../../../../components/AlertPopup";
-import { useDispatch, useSelector } from "../../../../hooks";
+import { useDispatch, useSelector, useSignalR } from "../../../../hooks";
 import { approveTemplate } from "../../../../slices/template";
 import { StatusTemplate } from "../../../../utils/constants";
 import { useTranslation } from "react-i18next";
 import { helpers } from "../../../../utils";
-
-const LoadingBtn = styled(
-  LoadingButton,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  padding: "5px",
-  textTransform: "unset",
-  // fontSize: '15px',
-  // width: 'fit-content',
-  ":hover": { backgroundColor: "#578aff" },
-  "&.MuiLoadingButton-loading": {
-    backgroundColor: "#fff",
-    borderColor: "#407AFF",
-  },
-});
-
-const CancelBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#fff",
-  borderRadius: "5px",
-  color: "#407AFF",
-  padding: "5px",
-  textTransform: "unset",
-  // ":hover": { backgroundColor: "#407AFF", color: "#fff", },
-});
-
-const ApproveBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  ":hover": { backgroundColor: "#fff", color: "#407AFF" },
-  "&.Mui-disabled": {
-    color: "#F2F2F2",
-    backgroundColor: "#6F7276",
-  },
-});
-const RejectBtn = styled(
-  Button,
-  {}
-)({
-  backgroundColor: "#ff5252",
-  borderRadius: "5px",
-  color: "#fff",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  ":hover": { backgroundColor: "#fff", color: "#407AFF" },
-  "&.Mui-disabled": {
-    color: "#F2F2F2",
-    backgroundColor: "#6F7276",
-  },
-});
+import { WhiteBtn, SaveLoadingBtn, RejectBtn } from "../../../../components/CustomStyled";
 
 const { APPROVED_TEMPLATE, REJECTED_TEMPLATE } = StatusTemplate;
 
@@ -94,6 +31,7 @@ const ViewApproveTemplate: React.FC = () => {
   const { isApproveTemplateLoading, templateDetail } = useSelector(
     (state) => state.template
   );
+  const {sendSignalNotification} = useSignalR()
   const { userInfo } = useSelector((state) => state.auth);
   const {
     createdAt,
@@ -109,16 +47,21 @@ const ViewApproveTemplate: React.FC = () => {
   const [isAccepting, setIsAccepting] = useState<boolean>(true);
   const [reason, setReason] = useState<string | undefined>();
   const [openDialog, setOpenDialog] = useState(false);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
   const signers = signatoryList.map((signer) => (
     <div className="flex flex-col space-y-3 rounded-md border border-solid border-white p-4">
       <div className="flex space-x-2 items-center ">
         <h4>{t("Signer")}:</h4>
         <Typography className="text-white">{signer.username}</Typography>
       </div>
+      <div className="flex space-x-2 items-center ">
+        <h4>{t("Department")}:</h4>
+        <Typography className="text-white">{t(signer.departmentName)}</Typography>
+      </div>
       <div className="flex space-x-2 items-center">
         <h4>{t("Role")}:</h4>
-        <Typography className="text-white">{signer.roleName}</Typography>
+        <Typography className="text-white">{t(signer.roleName)}</Typography>
       </div>
     </div>
   ));
@@ -131,12 +74,14 @@ const ViewApproveTemplate: React.FC = () => {
         path: "/webviewer/lib",
         initialDoc: link!,
         disabledElements: [
-          'downloadButton'
+          'downloadButton',
+          'languageButton'
         ],
       },
       viewer.current!
     ).then(async (instance) => {
       const { documentViewer } = instance.Core;
+      instance.UI.setLanguage(i18n.language === 'vn' ? 'vi' : 'en');
       const annotManager = documentViewer.getAnnotationManager();
       instance.UI.setHeaderItems(function (header) {
         header.push({
@@ -154,7 +99,7 @@ const ViewApproveTemplate: React.FC = () => {
         documentViewer.updateView();
       });
     });
-  }, [link, templateName]);
+  }, [link, templateName, i18n.language]);
 
   const onApproveTemplate = async () => {
     await dispatch(
@@ -165,6 +110,13 @@ const ViewApproveTemplate: React.FC = () => {
         reason: `${!isAccepting ? reason : undefined}`,
       })
     ).unwrap();
+    sendSignalNotification({
+      userIds: [createdBy.id],
+      notify: {
+        isChecked: false,
+        description: `${templateName} has been ${isAccepting ? 'accepted':'rejected'} by ${userInfo?.userName}!`,
+      },
+    });
     navigate("/user");
   };
   return (
@@ -179,14 +131,14 @@ const ViewApproveTemplate: React.FC = () => {
         <div className="flex flex-col bg-dark-config min-h-screen px-10 pt-12 space-y-8 pb-8 md:w-80 md:pb-0">
           <div className="flex flex-col space-y-8 text-white">
             <div className="flex flex-col space-y-2">
-              <h4>{t("File name")}:</h4>
+              <h4 className="whitespace-nowrap">{t("File name")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {templateName}
               </span>
             </div>
 
             <div className="flex flex-col space-y-2">
-              <h4>{t("Description")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Description")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {description}
               </span>
@@ -204,25 +156,26 @@ const ViewApproveTemplate: React.FC = () => {
               </span>
             </div>
             <div className="flex flex-col space-y-2">
-              <h4>{t("Created By")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Created By")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {createdBy.username}
               </span>
             </div>
             <div className="flex flex-col space-y-2">
-              <h4>{t("Created At")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Created At")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {helpers.addHours(createdAt, 7)}
               </span>
             </div>
             <Divider className="bg-white" />
             <div className="flex justify-center">
-              <h4>{t("Signer List")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Signer List")}:</h4>
             </div>
+
             {signers}
             <div className="flex items-center">
               <Switch
-                defaultChecked={isAccepting}
+                checked={isAccepting}
                 onClick={() => setIsAccepting((prevState) => !prevState)}
                 sx={{
                   "&	.MuiSwitch-track": {
@@ -264,13 +217,13 @@ const ViewApproveTemplate: React.FC = () => {
                 </RejectBtn>
               </div>
             ) : (
-              <ApproveBtn
+              <SaveLoadingBtn
                 size="small"
                 variant="outlined"
                 onClick={() => setOpenDialog(true)}
               >
                 {t("Approve")}
-              </ApproveBtn>
+              </SaveLoadingBtn>
             )}
           </div>
         </div>
@@ -291,10 +244,10 @@ const ViewApproveTemplate: React.FC = () => {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <CancelBtn onClick={() => setOpenDialog(false)} size="small">
+          <WhiteBtn onClick={() => setOpenDialog(false)} size="small">
             {t("Cancel")}
-          </CancelBtn>
-          <LoadingBtn
+          </WhiteBtn>
+          <SaveLoadingBtn
             size="small"
             loading={isApproveTemplateLoading}
             loadingIndicator={<CircularProgress color="inherit" size={16} />}
@@ -302,7 +255,7 @@ const ViewApproveTemplate: React.FC = () => {
             onClick={onApproveTemplate}
           >
             {t("Save")}
-          </LoadingBtn>
+          </SaveLoadingBtn>
         </DialogActions>
       </Dialog>
       <AlertPopup

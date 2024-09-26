@@ -1,35 +1,14 @@
-import { CircularProgress } from "@mui/material";
+import { CircularProgress, Divider } from "@mui/material";
 import React, { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { styled } from "@mui/system";
 import ArrowBackIosIcon from "@mui/icons-material/ArrowBackIos";
 import WebViewer from "@pdftron/webviewer";
-import { LoadingButton } from "@mui/lab";
 import AlertPopup from "../../../../components/AlertPopup";
-import { useDispatch, useSelector } from "../../../../hooks";
+import { useDispatch, useSelector, useSignalR } from "../../../../hooks";
 import { createDocument } from "../../../../slices/document";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
-
-const SendBtn = styled(
-  LoadingButton,
-  {}
-)({
-  backgroundColor: "#407AFF",
-  borderRadius: "5px",
-  color: "#fff",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  ":hover": { backgroundColor: "#fff", color: "#407AFF" },
-  "&.Mui-disabled": {
-    color: "#F2F2F2",
-    backgroundColor: "#6F7276",
-  },
-  "&.MuiLoadingButton-loading": {
-    backgroundColor: "#fff",
-    borderColor: "#407AFF",
-  },
-});
+import { SaveLoadingBtn } from "../../../../components/CustomStyled";
 
 const ViewCreateDocument: React.FC = () => {
   const viewer = useRef(null);
@@ -38,6 +17,7 @@ const ViewCreateDocument: React.FC = () => {
   const { templateDetail } = useSelector((state) => state.template);
   const { isCreateDocumentLoading } = useSelector((state) => state.document);
   const { userInfo } = useSelector((state) => state.auth);
+  const { sendSignalNotification } = useSignalR();
   const {
     departmentName,
     description,
@@ -45,12 +25,37 @@ const ViewCreateDocument: React.FC = () => {
     typeName,
     link,
     id,
+    signatoryList,
     isEnable,
   } = templateDetail!;
   const [xfdfString, setXfdfString] = useState<string | undefined>();
-  const [enableSend, setEnableSend] = useState<boolean>(false);
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
+  const signers = signatoryList.map((signer, index) => (
+    <div
+      className="flex flex-col space-y-3 rounded-md border border-solid border-white p-4"
+      key={index}
+    >
+      <div className="flex space-x-2 items-center ">
+        <h4>{t("Signer")}:</h4>
+        <span className="text-white text-base break-words">
+          {signer.username}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>{t("Department")}:</h4>
+        <span className="text-white text-base break-words">
+          {t(signer.departmentName)}
+        </span>
+      </div>
+      <div className="flex space-x-2 items-center">
+        <h4>{t("Role")}:</h4>
+        <span className="text-white text-base break-words">
+          {t(signer.roleName)}
+        </span>
+      </div>
+    </div>
+  ));
   // if using a class, equivalent of componentDidMount
 
   useEffect(() => {
@@ -58,12 +63,17 @@ const ViewCreateDocument: React.FC = () => {
       {
         path: "/webviewer/lib",
         initialDoc: link!,
-        disabledElements: [ "toolbarGroup-Forms", 'downloadButton'],
+        disabledElements: [
+          "toolbarGroup-Forms",
+          "downloadButton",
+          "languageButton",
+        ],
         annotationUser: userInfo?.userId!.toString(),
       },
       viewer.current!
     ).then(async (instance) => {
       const { documentViewer, annotationManager, Annotations } = instance.Core;
+      instance.UI.setLanguage(i18n.language === "vn" ? "vi" : "en");
       instance.UI.setHeaderItems(function (header) {
         header.push({
           type: "actionButton",
@@ -71,7 +81,7 @@ const ViewCreateDocument: React.FC = () => {
           onClick: async () =>
             await instance.UI.downloadPdf({
               filename: templateName.replace(/.docx|.doc/g, ""),
-              includeAnnotations: false
+              includeAnnotations: false,
             }),
         });
       });
@@ -87,7 +97,7 @@ const ViewCreateDocument: React.FC = () => {
               StrokeColor: new Annotations.Color(0, 255, 0, 0),
             }
           );
-          annot.ReadOnly = true
+          annot.ReadOnly = true;
           annot.setPathPoint(0, 300, 20); // Callout ending (start)
           // annot.setPathPoint(1, 425, 75);  // Callout knee
           // annot.setPathPoint(2, 300, 75);  // Callout joint
@@ -115,27 +125,34 @@ const ViewCreateDocument: React.FC = () => {
               })
             ).replaceAll(/\\&quot;/gi, "");
             setXfdfString(annots);
-
-            const checkAnnotExists = annotationManager.getAnnotationsList();
-            // console.log(checkAnnotExists[0].elementName)
-            // checkAnnotExists.length >= 3
-            //   ? setEnableSend(true)
-            //   : setEnableSend(false);
           }
         );
-        console.log(annotationManager.getAnnotationsList())
       });
     });
-  }, [departmentName, link, templateName, typeName, userInfo?.userId, userInfo?.userName]);
+  }, [
+    departmentName,
+    link,
+    templateName,
+    typeName,
+    userInfo?.userId,
+    userInfo?.userName,
+    i18n.language,
+  ]);
 
-  const onCreateTemplate = async () => {
-    await dispatch(
-      createDocument({
-        createdBy: +userInfo?.userId!,
-        idTemplate: id,
-        xfdfString: xfdfString!,
-      })
-    ).unwrap();
+  const onCreateDocument = async () => {
+    // await dispatch(
+    //   createDocument({
+    //     createdBy: +userInfo?.userId!,
+    //     idTemplate: id,
+    //     xfdfString: xfdfString!,
+    //   })
+    // ).unwrap();
+    sendSignalNotification({
+      userIds: [signatoryList[0].id],
+      notify: {
+        isChecked: false,
+        description: `You have a new document waiting for an approval!`,
+    }});
     navigate("/user");
   };
 
@@ -151,14 +168,14 @@ const ViewCreateDocument: React.FC = () => {
         <div className="flex flex-col bg-dark-config min-h-screen px-10 pt-12 space-y-8 md:w-80">
           <div className="flex flex-col space-y-8 text-white">
             <div className="flex flex-col space-y-2">
-              <h4>{t("File name")}:</h4>
+              <h4 className="whitespace-nowrap">{t("File name")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {templateName}
               </span>
             </div>
 
             <div className="flex flex-col space-y-2">
-              <h4>{t("Description")}:</h4>
+              <h4 className="whitespace-nowrap">{t("Description")}:</h4>
               <span className="text-white text-base break-words w-60">
                 {description}
               </span>
@@ -166,28 +183,33 @@ const ViewCreateDocument: React.FC = () => {
             <div className="flex items-center space-x-1">
               <h4 className="whitespace-nowrap">{t("Type")}:</h4>
               <span className="text-white text-base break-words w-60">
-                {typeName}
+                {t(typeName)}
               </span>
             </div>
             <div className="flex items-center space-x-1">
               <h4 className="whitespace-nowrap">{t("Department")}:</h4>
               <span className="text-white text-base break-words w-60">
-                {departmentName}
+                {t(departmentName)}
               </span>
             </div>
+            <Divider className="bg-white" />
+            <div className="flex justify-center">
+              <h4 className="whitespace-nowrap">{t("Signer List")}:</h4>
+            </div>
+            {signers}
             {isEnable && (
-              <SendBtn
+              <SaveLoadingBtn
                 size="small"
                 loading={isCreateDocumentLoading}
                 loadingIndicator={
                   <CircularProgress color="inherit" size={16} />
                 }
                 variant="outlined"
-                onClick={onCreateTemplate}
+                onClick={onCreateDocument}
                 disabled={false}
               >
                 {t("Send")}
-              </SendBtn>
+              </SaveLoadingBtn>
             )}
           </div>
         </div>

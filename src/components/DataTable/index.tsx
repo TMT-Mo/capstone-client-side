@@ -4,6 +4,9 @@ import {
   GridColumnVisibilityModel,
   GridFilterModel,
   GridSortModel,
+  viVN,
+  enUS,
+  GridColDef,
 } from "@mui/x-data-grid";
 import { useDispatch, useSelector } from "../../hooks";
 import {
@@ -13,8 +16,9 @@ import {
   Permissions,
 } from "../../utils/constants";
 import {
+  accountColumns,
   awaitSigningColumns,
-  historyColumns,
+  historyDocColumns,
   newTemplatesColumns,
   personalDocColumns,
   sharedDocColumns,
@@ -35,6 +39,9 @@ import { GridColumnModel, Data, GetRowIdParams } from "../../models/mui-data";
 import { setFilter, setSorter } from "../../slices/filter";
 import { helpers } from "../../utils";
 import CustomNoRow from "../CustomNoRow";
+import { useTranslation } from "react-i18next";
+import { clearAccountPagination, clearUserList, onChangeAccountPage } from "../../slices/system";
+import { DummyUserList } from "../../utils/dummy-data";
 
 const {
   SYSTEM,
@@ -49,16 +56,20 @@ const {
 } = LocationIndex;
 
 const { ENABLE_TEMPLATE } = Permissions;
-const { MOBILE, IPAD, LAPTOP } = DeviceType;
-const { checkHideColumnFromDevice, checkHideColumnFromPermission } = helpers;
+const { IPAD } = DeviceType;
+const { checkHideColumnFromDevice } = helpers;
 
 const DataTable: React.FC = () => {
   const dispatch = useDispatch();
+  const { t, i18n } = useTranslation();
   const [columnVisibilityModel, setColumnVisibilityModel] =
     React.useState<GridColumnVisibilityModel>();
   const { locationIndex } = useSelector((state) => state.location);
   const { isGetTemplatesLoading, templateList } = useSelector(
     (state) => state.template
+  );
+  const { isGetUserListLoading, userList } = useSelector(
+    (state) => state.system
   );
   const { isGetDocumentListLoading, documentList } = useSelector(
     (state) => state.document
@@ -71,6 +82,8 @@ const DataTable: React.FC = () => {
   const currentPageDocument = useSelector(
     (state) => state.document.currentPage
   );
+  const totalAccount = useSelector((state) => state.system.total);
+  const currentPageAccount = useSelector((state) => state.system.currentPage);
 
   const onFilterChange = React.useCallback(
     (filterModel: GridFilterModel) => {
@@ -83,10 +96,35 @@ const DataTable: React.FC = () => {
       }
       dispatch(clearTemplatePagination());
       dispatch(clearDocumentPagination());
+      dispatch(clearAccountPagination())
       dispatch(setFilter({ field: columnField as DataTableHeader, value }));
     },
     [dispatch]
   );
+
+  const onTranslateFilter = (
+    table: GridColDef[] | undefined
+  ): GridColDef[] | undefined => {
+    if (!table) return undefined;
+    let translatedTable: GridColDef[] = [];
+    for (let i = 0; i < table.length; i++) {
+      const currentValue = table[i];
+      let translateFilter = currentValue.filterOperators;
+      if (translateFilter) {
+        const filter = { ...translateFilter[0] };
+        translateFilter[0] = { ...filter, label: t(filter.label!) };
+      }
+      const item: GridColDef = {
+        ...currentValue,
+        headerName: t(currentValue.headerName!),
+        filterOperators: translateFilter,
+      };
+      translatedTable.push(item);
+    }
+    return translatedTable;
+  };
+
+  // console.log(templateColumns.forEach(col => console.log(col)))
 
   const handleSortModelChange = React.useCallback(
     (sortModel: GridSortModel) => {
@@ -111,18 +149,18 @@ const DataTable: React.FC = () => {
     createdBy:
       usePermission(ENABLE_TEMPLATE) && checkHideColumnFromDevice(IPAD),
   };
-
+  
   const data = (): Data => {
     switch (locationIndex) {
       case SYSTEM:
         return {
-          columns: templateColumns,
+          columns: [],
           loading: false,
-          table: templateList,
+          table: [],
         };
       case NEW_TEMPLATE:
         return {
-          columns: newTemplatesColumns,
+          columns: onTranslateFilter(newTemplatesColumns),
           loading: isGetTemplatesLoading,
           table: templateList,
           currentPage: currentPageTemplate,
@@ -133,13 +171,18 @@ const DataTable: React.FC = () => {
         };
       case ACCOUNT:
         return {
-          columns: templateColumns,
-          loading: false,
-          table: templateList,
+          columns: onTranslateFilter(accountColumns),
+          loading: isGetUserListLoading,
+          table: userList,
+          currentPage: currentPageAccount,
+          totalPages: Math.ceil(totalAccount! / 10),
+          onChangePage: (e, value) =>
+            dispatch(onChangeAccountPage({ selectedPage: --value })),
+          columnVisible,
         };
-      case TEMPLATE:
+      case TEMPLATE: {
         return {
-          columns: templateColumns,
+          columns: onTranslateFilter(templateColumns),
           loading: isGetTemplatesLoading,
           table: templateList,
           currentPage: currentPageTemplate,
@@ -148,9 +191,11 @@ const DataTable: React.FC = () => {
             dispatch(onChangeTemplatePage({ selectedPage: --value })),
           columnVisible,
         };
+      }
+
       case AWAIT_SIGNING:
         return {
-          columns: awaitSigningColumns,
+          columns: onTranslateFilter(awaitSigningColumns),
           loading: isGetDocumentListLoading,
           table: documentList,
           currentPage: currentPageDocument,
@@ -160,7 +205,7 @@ const DataTable: React.FC = () => {
         };
       case TEMPLATE_HISTORY:
         return {
-          columns: templateHistoryColumns,
+          columns: onTranslateFilter(templateHistoryColumns),
           loading: isGetTemplatesLoading,
           table: templateList,
           currentPage: currentPageTemplate,
@@ -171,7 +216,7 @@ const DataTable: React.FC = () => {
         };
       case PERSONAL:
         return {
-          columns: personalDocColumns,
+          columns: onTranslateFilter(personalDocColumns),
           loading: isGetDocumentListLoading,
           table: documentList,
           currentPage: currentPageDocument,
@@ -181,13 +226,17 @@ const DataTable: React.FC = () => {
         };
       case SHARED:
         return {
-          columns: sharedDocColumns,
-          loading: false,
-          table: templateList,
+          columns: onTranslateFilter(sharedDocColumns),
+          loading: isGetDocumentListLoading,
+          table: documentList,
+          currentPage: currentPageDocument,
+          totalPages: Math.ceil(totalDocument! / 10),
+          onChangePage: (e, value) =>
+            dispatch(onChangeDocumentPage({ selectedPage: --value })),
         };
       case DOCUMENT_HISTORY:
         return {
-          columns: historyColumns,
+          columns: onTranslateFilter(historyDocColumns),
           loading: isGetDocumentListLoading,
           table: documentList,
           currentPage: currentPageDocument,
@@ -203,7 +252,7 @@ const DataTable: React.FC = () => {
   const getRowId = (params: GetRowIdParams) => {
     return params.id;
   };
-
+  
   return (
     <div style={{ height: 600, width: "100%" }}>
       <DataGrid
@@ -215,7 +264,12 @@ const DataTable: React.FC = () => {
         getRowId={getRowId}
         onFilterModelChange={onFilterChange}
         filterMode="server"
+        // filterModel={data().filterModel!}
         sortingMode="server"
+        localeText={
+          (i18n.language === "vn" ? viVN : enUS).components.MuiDataGrid
+            .defaultProps.localeText
+        }
         onSortModelChange={handleSortModelChange}
         columnVisibilityModel={
           columnVisibilityModel
@@ -229,6 +283,7 @@ const DataTable: React.FC = () => {
         hideFooter
         components={{
           NoRowsOverlay: CustomNoRow,
+          // FilterPanel: () => <TextField/>
         }}
       />
       {data().table.length > 0 && (

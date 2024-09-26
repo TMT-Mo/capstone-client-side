@@ -1,15 +1,34 @@
-import { IconButton } from "@mui/material";
+import { Box, Dialog, DialogTitle, IconButton, Tab, Tabs } from "@mui/material";
 import { TouchRippleActions } from "@mui/material/ButtonBase/TouchRipple";
 import { GridRenderCellParams } from "@mui/x-data-grid";
-import React from "react";
+import React, { useState } from "react";
 import BorderColorIcon from "@mui/icons-material/BorderColor";
 import { Link } from "react-router-dom";
 import { setViewerLocation } from "../../../../slices/location";
-import { ViewerLocationIndex } from "../../../../utils/constants";
+import {
+  ShareTabIndex,
+  StatusDocument,
+  ViewerLocationIndex,
+} from "../../../../utils/constants";
 import { useDispatch } from "../../../../hooks";
 import { getDocumentDetail } from "../../../../slices/document";
+import ShareIcon from "@mui/icons-material/Share";
+import { useTranslation } from "react-i18next";
+import { styled } from "@mui/system";
+import DepartmentTab from "./department-tab";
+import { Document } from "../../../../models/document";
+import UserTab from "./user-tab";
 
-const { VIEW_PERSONAL_DOCUMENT_INDEX } = ViewerLocationIndex;
+const StyledDialog = styled(Dialog)({
+  width: "100vw",
+});
+
+function a11yProps(index: number) {
+  return {
+    id: `simple-tab-${index}`,
+    "aria-controls": `simple-tabpanel-${index}`,
+  };
+}
 
 export const PersonalDocumentActionCell = (
   props: GridRenderCellParams<Date>
@@ -17,7 +36,15 @@ export const PersonalDocumentActionCell = (
   const { hasFocus, row } = props;
   const buttonElement = React.useRef<HTMLButtonElement | null>(null);
   const rippleRef = React.useRef<TouchRippleActions | null>(null);
+  const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
   const dispatch = useDispatch();
+  const [value, setValue] = React.useState(0);
+  const { id, status } = row as Document;
+  const {DEPARTMENT, USER} = ShareTabIndex
+  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+    setValue(newValue);
+  };
 
   React.useLayoutEffect(() => {
     if (hasFocus) {
@@ -28,6 +55,26 @@ export const PersonalDocumentActionCell = (
       rippleRef.current.stop({} as any);
     }
   }, [hasFocus]);
+
+  const createTab = () => {
+    switch (value) {
+      case DEPARTMENT:
+        return <DepartmentTab
+        onOpen={() => setOpen((prevState) => !prevState)}
+        value={value}
+        idDocument={id}
+      />
+    
+      default:
+        return <UserTab
+        onOpen={() => setOpen((prevState) => !prevState)}
+        value={value}
+        idDocument={id}
+      />
+    }
+  }
+
+  // * Clear data
 
   return (
     <div>
@@ -47,6 +94,40 @@ export const PersonalDocumentActionCell = (
           <BorderColorIcon fontSize="small" />
         </Link>
       </IconButton>
+      {(status === StatusDocument.APPROVED_DOCUMENT ||
+        status === StatusDocument.REJECTED_DOCUMENT) && (
+        <IconButton
+          aria-label="delete"
+          onClick={() => setOpen((prevState) => !prevState)}
+        >
+          <ShareIcon fontSize="small" />
+        </IconButton>
+      )}
+      <StyledDialog
+        open={open}
+        onClose={() => setOpen((prevState) => !prevState)}
+        aria-labelledby="alert-dialog-title"
+        aria-describedby="alert-dialog-description"
+      >
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <DialogTitle id="alert-dialog-title">Share Document</DialogTitle>
+          <Tabs
+            value={value}
+            onChange={handleChange}
+            aria-label="basic tabs example"
+            // sx={}
+          >
+            <Tab label="Department" {...a11yProps(DEPARTMENT)} />
+            <Tab label="User" {...a11yProps(USER)} />
+            {/* <Tab label="User" {...a11yProps(2)} /> */}
+          </Tabs>
+        </Box>
+
+        {/* Department Tab */}
+
+        {createTab()}
+        
+      </StyledDialog>
     </div>
   );
 };

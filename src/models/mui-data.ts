@@ -1,7 +1,9 @@
 import { DataTableHeader } from './../utils/constants';
-import { GridColDef } from "@mui/x-data-grid";
+import { GridColDef, GridFilterModel } from "@mui/x-data-grid";
 import { Document } from "./document";
 import { Template } from "./template";
+import { IUser } from './system';
+import { User } from '../utils/dummy-data';
 
 export interface GetRowIdParams {
   // The data item provided to the grid for the row in question
@@ -41,9 +43,10 @@ export interface SorterModel {
 export interface Data {
   columns?: GridColDef[];
   loading?: boolean;
-  table: Template[] | Document[];
+  table: Template[] | Document[] | IUser[];
   currentPage?: number;
   totalPages?: number;
   onChangePage?: (event: React.ChangeEvent<unknown>, page: number) => void;
   columnVisible?: GridColumnModel;
+  filterModel?: GridFilterModel
 }
